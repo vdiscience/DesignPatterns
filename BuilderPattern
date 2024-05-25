@@ -1,0 +1,324 @@
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Data;
+using System.Data.SqlClient;
+
+public class Product
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public decimal Price { get; set; }
+}
+
+public interface IProductBuilder
+{
+    IProductBuilder SetProduct(Product product);
+    IProductBuilder Create();
+    IProductBuilder Read(int id);
+    IProductBuilder Update();
+    IProductBuilder Delete(int id);
+    Product GetProduct();
+}
+
+public class AdoNetProductBuilder : IProductBuilder
+{
+    private Product _product;
+    private readonly string _connectionString;
+
+    public AdoNetProductBuilder(string connectionString)
+    {
+        _connectionString = connectionString;
+    }
+
+    public IProductBuilder SetProduct(Product product)
+    {
+        _product = product;
+        return this;
+    }
+
+    public IProductBuilder Create()
+    {
+        using (var connection = new SqlConnection(_connectionString))
+        {
+            var command = new SqlCommand("INSERT INTO Products (Name, Price) VALUES (@Name, @Price); SELECT SCOPE_IDENTITY()", connection);
+            command.Parameters.AddWithValue("@Name", _product.Name);
+            command.Parameters.AddWithValue("@Price", _product.Price);
+            connection.Open();
+            _product.Id = Convert.ToInt32(command.ExecuteScalar());
+        }
+        return this;
+    }
+
+    public IProductBuilder Read(int id)
+    {
+        using (var connection = new SqlConnection(_connectionString))
+        {
+            var command = new SqlCommand("SELECT * FROM Products WHERE Id = @Id", connection);
+            command.Parameters.AddWithValue("@Id", id);
+            connection.Open();
+            using (var reader = command.ExecuteReader())
+            {
+                if (reader.Read())
+                {
+                    _product = new Product
+                    {
+                        Id = (int)reader["Id"],
+                        Name = (string)reader["Name"],
+                        Price = (decimal)reader["Price"]
+                    };
+                }
+            }
+        }
+        return this;
+    }
+
+    public IProductBuilder Update()
+    {
+        using (var connection = new SqlConnection(_connectionString))
+        {
+            var command = new SqlCommand("UPDATE Products SET Name = @Name, Price = @Price WHERE Id = @Id", connection);
+            command.Parameters.AddWithValue("@Id", _product.Id);
+            command.Parameters.AddWithValue("@Name", _product.Name);
+            command.Parameters.AddWithValue("@Price", _product.Price);
+            connection.Open();
+            command.ExecuteNonQuery();
+        }
+        return this;
+    }
+
+    public IProductBuilder Delete(int id)
+    {
+        using (var connection = new SqlConnection(_connectionString))
+        {
+            var command = new SqlCommand("DELETE FROM Products WHERE Id = @Id", connection);
+            command.Parameters.AddWithValue("@Id", id);
+            connection.Open();
+            command.ExecuteNonQuery();
+        }
+        return this;
+    }
+
+    public Product GetProduct()
+    {
+        return _product;
+    }
+}
+
+public class EfProductBuilder : IProductBuilder
+{
+    private Product _product;
+    private readonly DbContext _context;
+
+    public EfProductBuilder(DbContext context)
+    {
+        _context = context;
+    }
+
+    public IProductBuilder SetProduct(Product product)
+    {
+        _product = product;
+        return this;
+    }
+
+    public IProductBuilder Create()
+    {
+        _context.Set<Product>().Add(_product);
+        _context.SaveChanges();
+        return this;
+    }
+
+    public IProductBuilder Read(int id)
+    {
+        _product = _context.Set<Product>().Find(id);
+        return this;
+    }
+
+    public IProductBuilder Update()
+    {
+        _context.Set<Product>().Update(_product);
+        _context.SaveChanges();
+        return this;
+    }
+
+    public IProductBuilder Delete(int id)
+    {
+        var product = _context.Set<Product>().Find(id);
+        if (product != null)
+        {
+            _context.Set<Product>().Remove(product);
+            _context.SaveChanges();
+        }
+        return this;
+    }
+
+    public Product GetProduct()
+    {
+        return _product;
+    }
+}
+
+public class ProductBuilderFactory
+{
+    public static IProductBuilder GetBuilder(string connectionString, bool useEfCore)
+    {
+        if (useEfCore)
+        {
+            var optionsBuilder = new DbContextOptionsBuilder<YourDbContext>();
+            optionsBuilder.UseSqlServer(connectionString);
+
+            var context = new YourDbContext(optionsBuilder.Options);
+            return new EfProductBuilder(context);
+        }
+        else
+        {
+            return new AdoNetProductBuilder(connectionString);
+        }
+    }
+}
+
+public class YourDbContext : DbContext
+{
+    public DbSet<Product> Products { get; set; }
+
+    public YourDbContext(DbContextOptions<YourDbContext> options) : base(options)
+    {
+    }
+}
+
+// Usage
+var connectionString = "YourConnectionStringHere";
+var useEfCore = true; // Set to true for EF Core, false for ADO.NET
+
+var builder = ProductBuilderFactory.GetBuilder(connectionString, useEfCore);
+
+var product = new Product { Name = "New Product", Price = 10.99m };
+builder.SetProduct(product).Create();
+
+var createdProduct = builder.Read(product.Id).GetProduct();
+createdProduct.Price = 12.99m;
+builder.SetProduct(createdProduct).Update();
+
+builder.Delete(createdProduct.Id);
+
+////// MongoDB implementation with the above. /////
+
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+using MongoDB.Driver;
+using System;
+
+public class MongoProduct
+{
+    [BsonId]
+    [BsonRepresentation(BsonType.ObjectId)]
+    public string Id { get; set; }
+
+    [BsonElement("Name")]
+    public string Name { get; set; }
+
+    public decimal Price { get; set; }
+}
+
+public class MongoProductBuilder : IProductBuilder
+{
+    private MongoProduct _product;
+    private readonly IMongoCollection<MongoProduct> _collection;
+
+    public MongoProductBuilder(string connectionString, string databaseName, string collectionName)
+    {
+        var client = new MongoClient(connectionString);
+        var database = client.GetDatabase(databaseName);
+        _collection = database.GetCollection<MongoProduct>(collectionName);
+    }
+
+    public IProductBuilder SetProduct(Product product)
+    {
+        _product = new MongoProduct
+        {
+            Name = product.Name,
+            Price = product.Price
+        };
+        return this;
+    }
+
+    public IProductBuilder Create()
+    {
+        _collection.InsertOne(_product);
+        return this;
+    }
+
+    public IProductBuilder Read(int id)
+    {
+        _product = _collection.Find(product => product.Id == id.ToString()).FirstOrDefault();
+        return this;
+    }
+
+    public IProductBuilder Update()
+    {
+        var filter = Builders<MongoProduct>.Filter.Eq(product => product.Id, _product.Id);
+        var update = Builders<MongoProduct>.Update.Set(product => product.Name, _product.Name)
+                                                   .Set(product => product.Price, _product.Price);
+        _collection.UpdateOne(filter, update);
+        return this;
+    }
+
+    public IProductBuilder Delete(int id)
+    {
+        _collection.DeleteOne(product => product.Id == id.ToString());
+        return this;
+    }
+
+    public Product GetProduct()
+    {
+        return new Product
+        {
+            Id = Convert.ToInt32(_product.Id),
+            Name = _product.Name,
+            Price = _product.Price
+        };
+    }
+}
+
+public class ProductBuilderFactory
+{
+    public static IProductBuilder GetBuilder(string connectionString, bool useEfCore, string databaseName = null, string collectionName = null)
+    {
+        if (useEfCore)
+        {
+            var optionsBuilder = new DbContextOptionsBuilder<YourDbContext>();
+            optionsBuilder.UseSqlServer(connectionString);
+
+            var context = new YourDbContext(optionsBuilder.Options);
+            return new EfProductBuilder(context);
+        }
+        else if (!string.IsNullOrEmpty(databaseName) && !string.IsNullOrEmpty(collectionName))
+        {
+            return new MongoProductBuilder(connectionString, databaseName, collectionName);
+        }
+        else
+        {
+            return new AdoNetProductBuilder(connectionString);
+        }
+    }
+}
+
+// Usage
+var adoConnectionString = "YourADOConnectionStringHere";
+var efConnectionString = "YourEFConnectionStringHere";
+var mongoConnectionString = "YourMongoDBConnectionStringHere";
+var useEfCore = true; // Set to true for EF Core, false for ADO.NET
+var useMongoDB = false; // Set to true to use MongoDB, false otherwise
+var databaseName = "YourMongoDBDatabaseName";
+var collectionName = "YourMongoDBCollectionName";
+
+var builder = ProductBuilderFactory.GetBuilder(useEfCore ? efConnectionString : adoConnectionString, useEfCore, useMongoDB ? databaseName : null, useMongoDB ? collectionName : null);
+
+var product = new Product { Name = "New Product", Price = 10.99m };
+builder.SetProduct(product).Create();
+
+var createdProduct = builder.Read(product.Id).GetProduct();
+createdProduct.Price = 12.99m;
+builder.SetProduct(createdProduct).Update();
+
+builder.Delete(createdProduct.Id);
+
