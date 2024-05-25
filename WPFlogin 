@@ -1,0 +1,68 @@
+<Window x:Class="YourNamespace.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MainWindow" Height="450" Width="800">
+    <Grid>
+        <!-- Trigger button to open the popup -->
+        <Button Content="Open Login Popup" HorizontalAlignment="Center" VerticalAlignment="Center" Click="OpenLoginPopup_Click"/>
+        
+        <!-- Popup definition -->
+        <Popup x:Name="LoginPopup" Placement="Center" StaysOpen="False">
+            <Border Style="{StaticResource BorderStyle}">
+                <StackPanel Orientation="Vertical" Margin="20">
+                    <TextBlock Text="Login" Style="{StaticResource LoginTextBlock}"/>
+                    <Grid VerticalAlignment="Center">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="User Name" Grid.Row="0" Style="{StaticResource DefaultTextBlock}"/>
+                        <TextBox Grid.Column="1" Grid.Row="1" Text="MP Codes" Style="{StaticResource LoginTextBox}"/>
+                        <TextBlock Text="Password" Grid.Row="2" Style="{StaticResource DefaultTextBlock}"/>
+                        <PasswordBox Grid.Row="3" Password="mpcodes" Style="{StaticResource LoginPasswordBox}"/>
+                    </Grid>
+                    <TextBlock Text="forgot password?" HorizontalAlignment="Right"/>
+                    <Button x:Name="LoginBtn" Style="{StaticResource LoginButtonStyle}"/>
+                    <TextBlock Text="Not a member?" Style="{StaticResource SignUpTextBlock}"/>
+                    <TextBlock Text="Sign Up" Style="{StaticResource SignUpTextBlock}"/>
+                </StackPanel>
+            </Border>
+        </Popup>
+    </Grid>
+</Window>
+
+
+
+
+using System.Windows;
+
+namespace YourNamespace
+{
+    public partial class MainWindow : Window
+    {
+        public MainWindow()
+        {
+            InitializeComponent();
+        }
+
+        private void OpenLoginPopup_Click(object sender, RoutedEventArgs e)
+        {
+            LoginPopup.IsOpen = true;
+        }
+    }
+}
+
+
+
+<Application.Resources>
+    <ResourceDictionary>
+        <ResourceDictionary.MergedDictionaries>
+            <ResourceDictionary Source="Styles/BorderStyle.xaml"/>
+            <ResourceDictionary Source="Styles/ButtonStyle.xaml"/>
+            <ResourceDictionary Source="Styles/TextBoxStyle.xaml"/>
+            <ResourceDictionary Source="Styles/TextBlockStyle.xaml"/>
+        </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+</Application.Resources>
