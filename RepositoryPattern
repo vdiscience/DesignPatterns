@@ -1,0 +1,228 @@
+// The Repository Pattern is a design pattern commonly used in C# applications to separate the data access logic from the business logic. 
+// This pattern aims to create a layer that isolates the database access, enabling a more modular, maintainable, and testable codebase. 
+// Here's a basic example to demonstrate how to implement the Repository Pattern in C#.
+
+public class Product
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public decimal Price { get; set; }
+}
+
+using System.Collections.Generic;
+
+public interface IProductRepository
+{
+    IEnumerable<Product> GetAll();
+    Product GetById(int id);
+    void Add(Product product);
+    void Update(Product product);
+    void Delete(int id);
+}
+
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
+
+public class ProductRepository : IProductRepository
+{
+    private readonly AppDbContext _context;
+
+    public ProductRepository(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    public IEnumerable<Product> GetAll()
+    {
+        return _context.Products.ToList();
+    }
+
+    public Product GetById(int id)
+    {
+        return _context.Products.Find(id);
+    }
+
+    public void Add(Product product)
+    {
+        _context.Products.Add(product);
+        _context.SaveChanges();
+    }
+
+    public void Update(Product product)
+    {
+        _context.Products.Update(product);
+        _context.SaveChanges();
+    }
+
+    public void Delete(int id)
+    {
+        var product = _context.Products.Find(id);
+        if (product != null)
+        {
+            _context.Products.Remove(product);
+            _context.SaveChanges();
+        }
+    }
+}
+
+using Microsoft.EntityFrameworkCore;
+
+public class AppDbContext : DbContext
+{
+    public DbSet<Product> Products { get; set; }
+
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+    {
+    }
+}
+
+public void ConfigureServices(IServiceCollection services)
+{
+    services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlServer(Configuration.GetConnectionString("DefaultConnection")));
+
+    services.AddScoped<IProductRepository, ProductRepository>();
+
+    services.AddControllersWithViews();
+}
+
+using Microsoft.AspNetCore.Mvc;
+using System.Collections.Generic;
+
+public class ProductsController : Controller
+{
+    private readonly IProductRepository _productRepository;
+
+    public ProductsController(IProductRepository productRepository)
+    {
+        _productRepository = productRepository;
+    }
+
+    public IActionResult Index()
+    {
+        IEnumerable<Product> products = _productRepository.GetAll();
+        return View(products);
+    }
+
+    public IActionResult Details(int id)
+    {
+        Product product = _productRepository.GetById(id);
+        if (product == null)
+        {
+            return NotFound();
+        }
+        return View(product);
+    }
+
+    // Add other actions for Create, Update, and Delete operations
+}
+
+///// setup unit tests /////
+dotnet add package Microsoft.EntityFrameworkCore.InMemory
+dotnet add package Moq
+dotnet add package xunit
+dotnet add package xunit.runner.visualstudio
+dotnet add package Microsoft.NET.Test.Sdk
+
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
+using Moq;
+using Xunit;
+
+public class ProductRepositoryTests
+{
+    private DbContextOptions<AppDbContext> _dbContextOptions;
+
+    public ProductRepositoryTests()
+    {
+        _dbContextOptions = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(databaseName: "TestDatabase")
+            .Options;
+
+        using (var context = new AppDbContext(_dbContextOptions))
+        {
+            context.Products.Add(new Product { Id = 1, Name = "Product1", Price = 10 });
+            context.Products.Add(new Product { Id = 2, Name = "Product2", Price = 20 });
+            context.SaveChanges();
+        }
+    }
+
+    [Fact]
+    public void GetAll_ReturnsAllProducts()
+    {
+        using (var context = new AppDbContext(_dbContextOptions))
+        {
+            var repository = new ProductRepository(context);
+
+            var products = repository.GetAll().ToList();
+
+            Assert.Equal(2, products.Count);
+            Assert.Equal("Product1", products[0].Name);
+            Assert.Equal("Product2", products[1].Name);
+        }
+    }
+
+    [Fact]
+    public void GetById_ReturnsCorrectProduct()
+    {
+        using (var context = new AppDbContext(_dbContextOptions))
+        {
+            var repository = new ProductRepository(context);
+
+            var product = repository.GetById(1);
+
+            Assert.NotNull(product);
+            Assert.Equal("Product1", product.Name);
+        }
+    }
+
+    [Fact]
+    public void Add_AddsProductToDatabase()
+    {
+        using (var context = new AppDbContext(_dbContextOptions))
+        {
+            var repository = new ProductRepository(context);
+            var newProduct = new Product { Id = 3, Name = "Product3", Price = 30 };
+
+            repository.Add(newProduct);
+
+            var product = repository.GetById(3);
+            Assert.NotNull(product);
+            Assert.Equal("Product3", product.Name);
+        }
+    }
+
+    [Fact]
+    public void Update_UpdatesExistingProduct()
+    {
+        using (var context = new AppDbContext(_dbContextOptions))
+        {
+            var repository = new ProductRepository(context);
+            var product = repository.GetById(1);
+
+            product.Name = "UpdatedProduct";
+            repository.Update(product);
+
+            var updatedProduct = repository.GetById(1);
+            Assert.Equal("UpdatedProduct", updatedProduct.Name);
+        }
+    }
+
+    [Fact]
+    public void Delete_RemovesProductFromDatabase()
+    {
+        using (var context = new AppDbContext(_dbContextOptions))
+        {
+            var repository = new ProductRepository(context);
+
+            repository.Delete(1);
+
+            var product = repository.GetById(1);
+            Assert.Null(product);
+        }
+    }
+}
+
+
